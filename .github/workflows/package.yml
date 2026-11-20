@@ -1,0 +1,88 @@
+name: Build and release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Ubuntu ${{ matrix.release }} amd64
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            release: "22.04"
+          - runner: ubuntu-24.04
+            release: "24.04"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build g++ qt6-base-dev python3-venv dpkg-dev
+          python3 -m venv .venv
+          .venv/bin/python -m pip install -r requirements-build.txt
+      - name: Build and test
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DPython3_EXECUTABLE="$PWD/.venv/bin/python"
+          cmake --build build --parallel 2
+          ctest --test-dir build --output-on-failure
+      - name: Package and test installed layout
+        env:
+          HOST_RELEASE: ${{ matrix.release }}
+        run: |
+          cpack --config build/CPackConfig.cmake -G DEB -B dist
+          mapfile -t packages < <(find dist -maxdepth 1 -name '*.deb')
+          test "${#packages[@]}" = 1
+          output="dist/$(basename "${packages[0]}" .deb)_ubuntu${HOST_RELEASE}.deb"
+          mv -- "${packages[0]}" "$output"
+          test "$(dpkg-deb -f "$output" Architecture)" = amd64
+          stage="$(mktemp -d)"
+          trap 'rm -rf -- "$stage"' EXIT
+          dpkg-deb -x "$output" "$stage"
+          QT_QPA_PLATFORM=offscreen "$stage/usr/bin/wego-jetson" --smoke-test
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: robot-studio-ubuntu-${{ matrix.release }}-amd64
+          path: dist/*.deb
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: package
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: robot-studio-ubuntu-*-amd64
+          path: release
+          merge-multiple: true
+      - name: Publish packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd release
+          packages=(*.deb)
+          test "${#packages[@]}" = 2
+          version="${GITHUB_REF_NAME#v}"
+          for pkg in "${packages[@]}"; do
+            test "$(dpkg-deb -f "$pkg" Version)" = "$version"
+          done
+          sha256sum "${packages[@]}" > SHA256SUMS
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            --verify-tag --generate-notes --title "Robot Studio $GITHUB_REF_NAME" \
+            "${packages[@]}" SHA256SUMS

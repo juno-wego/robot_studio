@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Robot Studio
+Comment=Jetson 및 로봇 설치와 검수
+Exec=/usr/bin/wego-jetson
+Icon=system-software-install
+Terminal=false
+Categories=System;
