@@ -30,7 +30,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            cmake ninja-build g++ qt6-base-dev python3-venv dpkg-dev
+            cmake ninja-build g++ qt6-base-dev libgl1-mesa-dev python3-venv dpkg-dev
           python3 -m venv .venv
           .venv/bin/python -m pip install -r requirements-build.txt
       - name: Build and test

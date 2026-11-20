@@ -37,7 +37,7 @@ USB 리커버리에서는 Jetson 모듈을 자동으로 표시합니다. 캐리�
 Ubuntu 22.04/24.04 x86-64에서 아래 순서로 빌드합니다.
 
 ```sh
-sudo apt install cmake ninja-build g++ qt6-base-dev python3-venv
+sudo apt install cmake ninja-build g++ qt6-base-dev libgl1-mesa-dev python3-venv
 python3 -m venv .venv
 .venv/bin/pip install -r requirements-build.txt
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DPython3_EXECUTABLE="$PWD/.venv/bin/python"
